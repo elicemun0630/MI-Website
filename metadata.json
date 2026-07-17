@@ -1,0 +1,8 @@
+{
+  "name": "PGM Global Insight Hub",
+  "description": "Automated defense market intelligence (MI) platform for global export strategy and competitive analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
