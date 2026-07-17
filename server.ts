@@ -70,37 +70,51 @@ app.get("/api/news", async (req, res) => {
     const db = await getDB();
     const allNews: NewsItem[] = [];
 
-    for (const country of countryList) {
-      console.log(`[NEWS] Fetching for ${country}...`);
-      const prompt = `Find the 3 most important recent defense and military procurement news for ${country}, specifically focusing on PGM (Precision Guided Munitions), MLRS (like K239 Chunmoo), and defense budget changes. 
-      Return ONLY a JSON array of objects with fields: title, summary (max 3 lines), url, source, publishedAt (ISO date). No other text.`;
+    console.log(`[NEWS] Consolidating fetch for: ${countryList.join(', ')}`);
+    
+    const prompt = `Find the 3 most important recent defense and military procurement news for EACH of these countries: ${countryList.join(', ')}.
+    Focus specifically on PGM (Precision Guided Munitions), MLRS (like K239 Chunmoo), and defense budget changes. 
+    
+    Return ONLY a JSON array of objects with fields: 
+    - title
+    - summary (max 3 lines)
+    - url
+    - source
+    - publishedAt (ISO date)
+    - country (the name of the country this news belongs to)
+    
+    No other text outside the JSON array.`;
 
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: prompt,
-          config: {
-            tools: [{ googleSearch: {} }],
-            responseMimeType: "application/json"
-          }
-        });
-
-        console.log(`[NEWS] Raw response for ${country}:`, response.text);
-        const parsed = extractJSON(response.text);
-        if (parsed && Array.isArray(parsed)) {
-          const newsItems = parsed.map((item: any) => ({
-            ...item,
-            id: Math.random().toString(36).substr(2, 9),
-            country
-          }));
-          allNews.push(...newsItems);
-          console.log(`[NEWS] Successfully parsed ${newsItems.length} items for ${country}`);
-        } else {
-          console.error(`[NEWS] Failed to parse JSON for ${country}. Text:`, response.text);
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json"
         }
-      } catch (err) {
-        console.error(`[NEWS] API Error for ${country}:`, err);
+      });
+
+      const responseText = response.text;
+      console.log(`[NEWS] Raw response:`, responseText);
+      const parsed = extractJSON(responseText);
+      
+      if (parsed && Array.isArray(parsed)) {
+        const newsItems = parsed.map((item: any) => ({
+          ...item,
+          id: Math.random().toString(36).substr(2, 9),
+          // Ensure country field exists or fallback
+          country: item.country || countryList[0] 
+        }));
+        allNews.push(...newsItems);
+        console.log(`[NEWS] Successfully parsed ${newsItems.length} items total`);
+      } else {
+        console.error(`[NEWS] Failed to parse JSON. Text:`, responseText);
       }
+    } catch (err) {
+      console.error(`[NEWS] API Error:`, err);
+      // Return existing news if refresh fails to keep UI functional
+      return res.json(db.news);
     }
 
     // Update DB with unique news
@@ -139,6 +153,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       model: "gemini-3.5-flash",
       contents: `Summarize the following defense market document focusing on key strategic insights, procurement plans, and budget implications. Keep it under 10 bullet points.\n\nDocument Content:\n${content.substring(0, 10000)}`,
     });
+    const summaryText = summaryResponse.text;
 
     const metadata: FileMetadata = {
       id: Math.random().toString(36).substr(2, 9),
@@ -146,7 +161,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       type: req.file.mimetype,
       size: req.file.size,
       uploadDate: new Date().toISOString(),
-      summary: summaryResponse.text
+      summary: summaryText
     };
 
     const db = await getDB();
@@ -190,11 +205,12 @@ app.post("/api/report", async (req, res) => {
         responseMimeType: "application/json"
       }
     });
+    const responseText = response.text;
 
-    console.log(`[REPORT] Raw response:`, response.text);
-    const reportData = extractJSON(response.text);
+    console.log(`[REPORT] Raw response:`, responseText);
+    const reportData = extractJSON(responseText);
     if (!reportData) {
-      console.error("[REPORT] Failed to parse JSON. Raw:", response.text);
+      console.error("[REPORT] Failed to parse JSON. Raw:", responseText);
       throw new Error("Failed to parse report JSON");
     }
 
