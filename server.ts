@@ -48,13 +48,23 @@ function extractJSON(text: string) {
     // Attempt to parse directly first
     return JSON.parse(text);
   } catch {
-    // Try to extract from markdown code blocks
-    const match = text.match(/```json\n?([\s\S]*?)\n?```/);
-    if (match && match[1]) {
+    // Find the first { or [ and last } or ]
+    const start = text.search(/[{\[]/);
+    const lastBrace = text.lastIndexOf('}');
+    const lastBracket = text.lastIndexOf(']');
+    const end = Math.max(lastBrace, lastBracket);
+    if (start !== -1 && end !== -1 && end > start) {
+      const slice = text.substring(start, end + 1);
       try {
-        return JSON.parse(match[1]);
+        return JSON.parse(slice);
       } catch {
-        return null;
+        // Try simple markdown cleanup if slice fails
+        const cleaned = slice.replace(/```json|```/g, "").trim();
+        try {
+          return JSON.parse(cleaned);
+        } catch {
+          return null;
+        }
       }
     }
     return null;
@@ -69,6 +79,32 @@ app.get("/api/news", async (req, res) => {
   try {
     const db = await getDB();
     const allNews: NewsItem[] = [];
+
+    // Seed data if empty to ensure UI is never blank
+    if (db.news.length === 0) {
+      const seedNews: NewsItem[] = [
+        {
+          id: 'seed-1',
+          title: "Hanwha Aerospace Expands Polish Presence with New Maintenance Hub",
+          summary: "Hanwha is establishing a major support center for K9 howitzers and Chunmoo MLRS in Poland, ensuring long-term fleet readiness.",
+          url: "https://www.hanwhaaerospace.co.kr",
+          source: "Hanwha MI Unit",
+          publishedAt: new Date().toISOString(),
+          country: "Poland"
+        },
+        {
+          id: 'seed-2',
+          title: "Saudi Arabia Defense Budget to Prioritize Domestic Production of PGM",
+          summary: "Vision 2030 targets local manufacturing of precision munitions, creating opportunities for international partnerships.",
+          url: "https://www.hanwhaaerospace.co.kr",
+          source: "Strategic Analysis",
+          publishedAt: new Date().toISOString(),
+          country: "Saudi Arabia"
+        }
+      ];
+      db.news = seedNews;
+      await saveDB(db);
+    }
 
     console.log(`[NEWS] Consolidating fetch for: ${countryList.join(', ')}`);
     
@@ -87,7 +123,7 @@ app.get("/api/news", async (req, res) => {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.0-flash",
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
@@ -150,7 +186,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 
     // Summarize content
     const summaryResponse = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       contents: `Summarize the following defense market document focusing on key strategic insights, procurement plans, and budget implications. Keep it under 10 bullet points.\n\nDocument Content:\n${content.substring(0, 10000)}`,
     });
     const summaryText = summaryResponse.text;
@@ -199,7 +235,7 @@ app.post("/api/report", async (req, res) => {
 
     console.log(`[REPORT] Generating for ${country} / ${topic}...`);
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json"

@@ -81,10 +81,15 @@ export default function App() {
         body: JSON.stringify(reportForm)
       });
       const newReport = await res.json();
+      if (newReport.error) {
+        alert("Report generation failed: " + newReport.error);
+        return;
+      }
       setData(prev => ({ ...prev, reports: [newReport, ...prev.reports] }));
       setActiveTab('reports');
     } catch (error) {
       console.error("Report generation failed", error);
+      alert("System intelligence link disrupted. Please try again later.");
     } finally {
       setGeneratingReport(false);
     }
