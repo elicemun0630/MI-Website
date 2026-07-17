@@ -1,6 +1,6 @@
 {
-  "name": "PGM Global Insight Hub",
-  "description": "Automated defense market intelligence (MI) platform for global export strategy and competitive analysis.",
+  "name": "Hanwha Aerospace MI Hub",
+  "description": "Professional defense market intelligence platform inspired by Hanwha Aerospace corporate identity, providing automated strategic briefings and global monitoring.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
