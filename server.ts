@@ -43,6 +43,24 @@ const ai = new GoogleGenAI({
 // API Routes
 app.use(express.json());
 
+function extractJSON(text: string) {
+  try {
+    // Attempt to parse directly first
+    return JSON.parse(text);
+  } catch {
+    // Try to extract from markdown code blocks
+    const match = text.match(/```json\n?([\s\S]*?)\n?```/);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 // 1. News Monitoring
 app.get("/api/news", async (req, res) => {
   const { countries } = req.query;
@@ -53,38 +71,36 @@ app.get("/api/news", async (req, res) => {
     const allNews: NewsItem[] = [];
 
     for (const country of countryList) {
+      console.log(`[NEWS] Fetching for ${country}...`);
       const prompt = `Find the 3 most important recent defense and military procurement news for ${country}, specifically focusing on PGM (Precision Guided Munitions), MLRS (like K239 Chunmoo), and defense budget changes. 
-      Return a JSON array of objects with fields: title, summary (max 3 lines), url, source, publishedAt (ISO date).`;
+      Return ONLY a JSON array of objects with fields: title, summary (max 3 lines), url, source, publishedAt (ISO date). No other text.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                summary: { type: Type.STRING },
-                url: { type: Type.STRING },
-                source: { type: Type.STRING },
-                publishedAt: { type: Type.STRING },
-              },
-              required: ["title", "summary", "url", "source", "publishedAt"]
-            }
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json"
           }
-        }
-      });
+        });
 
-      const newsItems = JSON.parse(response.text).map((item: any) => ({
-        ...item,
-        id: Math.random().toString(36).substr(2, 9),
-        country
-      }));
-      allNews.push(...newsItems);
+        console.log(`[NEWS] Raw response for ${country}:`, response.text);
+        const parsed = extractJSON(response.text);
+        if (parsed && Array.isArray(parsed)) {
+          const newsItems = parsed.map((item: any) => ({
+            ...item,
+            id: Math.random().toString(36).substr(2, 9),
+            country
+          }));
+          allNews.push(...newsItems);
+          console.log(`[NEWS] Successfully parsed ${newsItems.length} items for ${country}`);
+        } else {
+          console.error(`[NEWS] Failed to parse JSON for ${country}. Text:`, response.text);
+        }
+      } catch (err) {
+        console.error(`[NEWS] API Error for ${country}:`, err);
+      }
     }
 
     // Update DB with unique news
@@ -166,33 +182,22 @@ app.post("/api/report", async (req, res) => {
     
     Return as a JSON object with title and sections (array of {title, content}).`;
 
+    console.log(`[REPORT] Generating for ${country} / ${topic}...`);
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  content: { type: Type.STRING }
-                },
-                required: ["title", "content"]
-              }
-            }
-          },
-          required: ["title", "sections"]
-        }
+        responseMimeType: "application/json"
       }
     });
 
-    const reportData = JSON.parse(response.text);
+    console.log(`[REPORT] Raw response:`, response.text);
+    const reportData = extractJSON(response.text);
+    if (!reportData) {
+      console.error("[REPORT] Failed to parse JSON. Raw:", response.text);
+      throw new Error("Failed to parse report JSON");
+    }
+
     const report: MIReport = {
       ...reportData,
       id: Math.random().toString(36).substr(2, 9),

@@ -34,8 +34,10 @@ export default function App() {
       const res = await fetch('/api/data');
       const json = await res.json();
       setData(json);
+      return json;
     } catch (error) {
       console.error("Failed to fetch data", error);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData().then((fetchedData) => {
+      if (fetchedData && fetchedData.news.length === 0) {
+        refreshNews();
+      }
+    });
   }, []);
 
   const SidebarItem = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: any, label: string }) => (
